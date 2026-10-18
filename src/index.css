@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+/* Page Setup & Print Media Styling for Nasroute Delivery Orders & Barcode Sheets */
+@media print {
+  /* Hide UI chrome, header navigation, modals backdrop & floating action buttons */
+  header,
+  nav,
+  aside,
+  button:not(.print-include),
+  .print\:hidden,
+  .no-print {
+    display: none !important;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Unconstrain fixed modal containers so they print cleanly as the primary page document */
+  .fixed.inset-0 {
+    position: static !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  .shadow-2xl,
+  .shadow-xl,
+  .shadow-lg,
+  .shadow-md,
+  .shadow-sm,
+  .shadow-xs {
+    box-shadow: none !important;
+  }
+
+  .rounded-2xl,
+  .rounded-xl {
+    border-radius: 0 !important;
+  }
+
+  /* Thermal 80mm and 58mm specific print page setup */
+  body[data-paper-size="thermal_80mm"],
+  .thermal-80mm-preview {
+    width: 80mm !important;
+    max-width: 80mm !important;
+    font-size: 11px !important;
+  }
+
+  body[data-paper-size="thermal_58mm"],
+  .thermal-58mm-preview {
+    width: 58mm !important;
+    max-width: 58mm !important;
+    font-size: 10px !important;
+  }
+
+  .page-break-inside-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .page-break-after-always {
+    break-after: page;
+    page-break-after: always;
+  }
+}
+
+/* In-Van Driver Glove Mode & Phone Ergonomics */
+.touch-gloves-mode button,
+.touch-gloves-mode a {
+  min-height: 46px;
+  touch-action: manipulation;
+}
+.touch-gloves-mode input,
+.touch-gloves-mode select {
+  min-height: 44px;
+}
+

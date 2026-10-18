@@ -1,0 +1,8 @@
+{
+  "name": "OmniRoute Scan & Stock",
+  "description": "Real-time delivery driver mobile barcode scanner & inventory management system with automated price and quantity tracking across outlets.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
