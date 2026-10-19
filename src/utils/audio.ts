@@ -128,6 +128,22 @@ class SoundEngine {
       // ignore
     }
   }
+
+  // Voice announcement for hands-free driver operations
+  speak(text: string) {
+    try {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.05;
+        utterance.pitch = 1.0;
+        utterance.volume = 0.95;
+        window.speechSynthesis.speak(utterance);
+      }
+    } catch {
+      // ignore
+    }
+  }
 }
 
 export const sound = new SoundEngine();

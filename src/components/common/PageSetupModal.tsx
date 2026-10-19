@@ -439,6 +439,63 @@ export const PageSetupModal: React.FC<PageSetupModalProps> = ({
                         className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300"
                       />
                     </div>
+
+                    {/* Hide Attached Sections on Driver Screen & Scanner */}
+                    <div className="py-2.5 flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-semibold text-emerald-800 flex items-center gap-1.5">
+                          <span>👁️ Keep Attached Hidden on Main Screen & Scanner</span>
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-bold">
+                            Requested
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          Keeps attached destination details and item tables hidden so only the scanner and HUD are visible
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={formData.phoneDevice.hideAttached}
+                        onChange={(e) => updatePhoneDevice({ hideAttached: e.target.checked })}
+                        className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300"
+                      />
+                    </div>
+
+                    {/* Rapid Continuous Scanning */}
+                    <div className="py-2.5 flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-semibold text-indigo-900 flex items-center gap-1.5">
+                          <span>⚡ Rapid Continuous 1-Tap Auto-Add</span>
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          Instantly logs 1 unit upon scan without interrupting camera view or opening bulky dialogs
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={formData.phoneDevice.fastScanMode}
+                        onChange={(e) => updatePhoneDevice({ fastScanMode: e.target.checked })}
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300"
+                      />
+                    </div>
+
+                    {/* Voice Assistant Readout */}
+                    <div className="py-2.5 flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-semibold text-slate-900 flex items-center gap-1.5">
+                          <span>🔊 Voice Announcement (Acoustic Readout)</span>
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          Speaks out product name, remaining pieces in van, and QAR price hands-free
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={formData.phoneDevice.voiceFeedback}
+                        onChange={(e) => updatePhoneDevice({ voiceFeedback: e.target.checked })}
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

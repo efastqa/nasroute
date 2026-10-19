@@ -14,6 +14,8 @@ import {
   BatteryCharging,
   Wifi,
   Sparkles,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { useInventory } from '../../context/InventoryContext';
 import { PhoneModel, PhoneOrientation } from '../../types';
@@ -30,6 +32,7 @@ export const PhoneDeviceContainer: React.FC<PhoneDeviceContainerProps> = ({ chil
   const [currentTime, setCurrentTime] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [wakeLockActive, setWakeLockActive] = useState(false);
+  const [hideSimToolbar, setHideSimToolbar] = useState(false);
 
   // Keep local Qatar time updated for status bar
   useEffect(() => {
@@ -191,88 +194,110 @@ export const PhoneDeviceContainer: React.FC<PhoneDeviceContainerProps> = ({ chil
 
   return (
     <div className={`min-h-[calc(100vh-4rem)] bg-slate-900/95 py-6 px-4 flex flex-col items-center justify-start ${phoneSettings.touchTargetSize === 'large_glove_mode' ? 'touch-gloves-mode' : ''}`}>
-      {/* Device Toolbar Controls (Top) */}
-      <div className="w-full max-w-2xl mb-4 bg-slate-800/90 backdrop-blur-md border border-slate-700/80 rounded-2xl px-4 py-2.5 flex items-center justify-between gap-3 text-xs text-white shadow-xl">
-        {/* Left: Device Model Selector */}
-        <div className="flex items-center gap-1.5">
-          <Smartphone className="w-4 h-4 text-emerald-400" />
-          <span className="font-semibold text-slate-300 hidden sm:inline">Device:</span>
-          <div className="inline-flex bg-slate-900/80 p-0.5 rounded-lg border border-slate-700/60">
+      {/* Device Toolbar Controls (Top) - Can be collapsed for 100% clean screen */}
+      {hideSimToolbar ? (
+        <button
+          type="button"
+          onClick={() => setHideSimToolbar(false)}
+          className="mb-3 px-3 py-1 bg-slate-800/90 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-full border border-slate-700 shadow-md flex items-center gap-1.5 transition-all"
+          title="Show Device Simulator Controls"
+        >
+          <Eye className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Show Device Bar</span>
+        </button>
+      ) : (
+        <div className="w-full max-w-2xl mb-4 bg-slate-800/90 backdrop-blur-md border border-slate-700/80 rounded-2xl px-4 py-2.5 flex items-center justify-between gap-3 text-xs text-white shadow-xl animate-in fade-in duration-150">
+          {/* Left: Device Model Selector */}
+          <div className="flex items-center gap-1.5">
+            <Smartphone className="w-4 h-4 text-emerald-400" />
+            <span className="font-semibold text-slate-300 hidden sm:inline">Device:</span>
+            <div className="inline-flex bg-slate-900/80 p-0.5 rounded-lg border border-slate-700/60">
+              <button
+                type="button"
+                onClick={() => setModel('iphone15')}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                  phoneSettings.phoneModel === 'iphone15'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                iPhone 15 Pro
+              </button>
+              <button
+                type="button"
+                onClick={() => setModel('galaxy_s24')}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                  phoneSettings.phoneModel === 'galaxy_s24'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Galaxy S24
+              </button>
+              <button
+                type="button"
+                onClick={() => setModel('rugged_terminal')}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                  phoneSettings.phoneModel === 'rugged_terminal'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Rugged Van Scanner
+              </button>
+            </div>
+          </div>
+
+          {/* Right: Actions */}
+          <div className="flex items-center gap-2">
+            {/* Rotate Orientation */}
             <button
               type="button"
-              onClick={() => setModel('iphone15')}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
-                phoneSettings.phoneModel === 'iphone15'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'text-slate-400 hover:text-white'
+              onClick={toggleOrientation}
+              className={`p-1.5 rounded-lg border transition-all flex items-center gap-1 text-[11px] font-medium ${
+                isLandscape
+                  ? 'bg-indigo-600/30 border-indigo-500 text-indigo-300'
+                  : 'bg-slate-700/60 border-slate-600 text-slate-300 hover:text-white'
               }`}
+              title="Rotate to Landscape / Portrait"
             >
-              iPhone 15 Pro
+              <RotateCw className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">{isLandscape ? 'Landscape' : 'Portrait'}</span>
             </button>
+
+            {/* Toggle Full Width Mode */}
             <button
               type="button"
-              onClick={() => setModel('galaxy_s24')}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
-                phoneSettings.phoneModel === 'galaxy_s24'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'text-slate-400 hover:text-white'
-              }`}
+              onClick={toggleFrameMode}
+              className="p-1.5 bg-slate-700/60 hover:bg-slate-700 border border-slate-600 rounded-lg text-slate-300 hover:text-white text-[11px] font-medium transition-colors"
+              title="Switch to Full Width Mode"
             >
-              Galaxy S24
+              Full Width
             </button>
+
+            {/* Device Settings Modal */}
             <button
               type="button"
-              onClick={() => setModel('rugged_terminal')}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
-                phoneSettings.phoneModel === 'rugged_terminal'
-                  ? 'bg-amber-600 text-white shadow-xs'
-                  : 'text-slate-400 hover:text-white'
-              }`}
+              onClick={() => setShowSettingsModal(true)}
+              className="p-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors shadow-xs"
+              title="Configure Phone Device Settings"
             >
-              Rugged Van Scanner
+              <Sliders className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Phone Settings</span>
+            </button>
+
+            {/* Hide Simulator Toolbar Button */}
+            <button
+              type="button"
+              onClick={() => setHideSimToolbar(true)}
+              className="p-1.5 bg-slate-700/60 hover:bg-slate-700 border border-slate-600 rounded-lg text-slate-400 hover:text-white text-[11px] font-medium transition-colors"
+              title="Hide device bar"
+            >
+              <EyeOff className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
-
-        {/* Right: Actions */}
-        <div className="flex items-center gap-2">
-          {/* Rotate Orientation */}
-          <button
-            type="button"
-            onClick={toggleOrientation}
-            className={`p-1.5 rounded-lg border transition-all flex items-center gap-1 text-[11px] font-medium ${
-              isLandscape
-                ? 'bg-indigo-600/30 border-indigo-500 text-indigo-300'
-                : 'bg-slate-700/60 border-slate-600 text-slate-300 hover:text-white'
-            }`}
-            title="Rotate to Landscape / Portrait"
-          >
-            <RotateCw className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{isLandscape ? 'Landscape' : 'Portrait'}</span>
-          </button>
-
-          {/* Toggle Full Width Mode */}
-          <button
-            type="button"
-            onClick={toggleFrameMode}
-            className="p-1.5 bg-slate-700/60 hover:bg-slate-700 border border-slate-600 rounded-lg text-slate-300 hover:text-white text-[11px] font-medium transition-colors"
-            title="Switch to Full Width Mode"
-          >
-            Full Width
-          </button>
-
-          {/* Device Settings Modal */}
-          <button
-            type="button"
-            onClick={() => setShowSettingsModal(true)}
-            className="p-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors shadow-xs"
-            title="Configure Phone Device Settings"
-          >
-            <Sliders className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Phone Settings</span>
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* Hardware Phone Bezel Frame */}
       <div

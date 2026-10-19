@@ -15,7 +15,14 @@ import {
   AlertCircle,
   Package,
   Layers,
-  ArrowRight
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Volume2,
+  VolumeX,
+  ChevronDown,
+  ChevronUp,
+  RotateCcw,
 } from 'lucide-react';
 import { useInventory } from '../../context/InventoryContext';
 import { Product, Outlet } from '../../types';
@@ -26,14 +33,26 @@ interface CameraBarcodeScannerProps {
   onScanSuccess?: (barcode: string, product?: Product) => void;
   onClose?: () => void;
   outletId?: string;
+  hideAttached?: boolean;
+  onToggleHideAttached?: () => void;
+  fullscreenFocus?: boolean;
 }
 
 export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
   onScanSuccess,
   onClose,
   outletId,
+  hideAttached: propHideAttached,
+  onToggleHideAttached,
+  fullscreenFocus = false,
 }) => {
-  const { products, outlets, recordScan, quickAddStockToVan, addProduct } = useInventory();
+  const { products, outlets, recordScan, quickAddStockToVan, addProduct, pageSetup, updatePageSetup } = useInventory();
+  
+  // Use prop if provided, else fall back to phone device settings
+  const hideAttached = propHideAttached !== undefined ? propHideAttached : (pageSetup.phoneDevice?.hideAttached ?? true);
+  const fastScanMode = pageSetup.phoneDevice?.fastScanMode ?? true;
+  const voiceFeedback = pageSetup.phoneDevice?.voiceFeedback ?? false;
+
   const [isScanning, setIsScanning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [torchOn, setTorchOn] = useState(false);
@@ -48,6 +67,16 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
   const [scanMessage, setScanMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [unknownBarcode, setUnknownBarcode] = useState<string | null>(null);
 
+  // Floating HUD notification for scan-only view (when attached panels are hidden)
+  const [recentScanHud, setRecentScanHud] = useState<{
+    product: Product;
+    qtyAdded: number;
+    remainingVanStock: number;
+    timestamp: number;
+  } | null>(null);
+
+  const [forceShowAttachedCard, setForceShowAttachedCard] = useState(false);
+
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const isHandlingScanRef = useRef(false);
   const containerIdRef = useRef(`interactive-barcode-reader-${Math.random().toString(36).substring(2, 7)}`);
@@ -59,6 +88,41 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
   const liveScannedProduct = scannedProduct
     ? products.find((p) => p.id === scannedProduct.id) || scannedProduct
     : null;
+
+  const toggleHideAttachedSetting = () => {
+    if (onToggleHideAttached) {
+      onToggleHideAttached();
+    } else {
+      updatePageSetup({
+        phoneDevice: {
+          ...pageSetup.phoneDevice,
+          hideAttached: !hideAttached,
+        },
+      });
+    }
+  };
+
+  const toggleFastScanMode = () => {
+    updatePageSetup({
+      phoneDevice: {
+        ...pageSetup.phoneDevice,
+        fastScanMode: !fastScanMode,
+      },
+    });
+  };
+
+  const toggleVoiceFeedback = () => {
+    const nextVal = !voiceFeedback;
+    updatePageSetup({
+      phoneDevice: {
+        ...pageSetup.phoneDevice,
+        voiceFeedback: nextVal,
+      },
+    });
+    if (nextVal) {
+      sound.speak('Voice assistant enabled');
+    }
+  };
 
   const handleBarcodeDetected = useCallback(
     (decodedText: string) => {
@@ -72,26 +136,89 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
 
       if (found) {
         setUnknownBarcode(null);
-        setScannedProduct(found);
-        setDeliveryQty(1);
-        setScanMessage({
-          text: `Found in Van: ${found.name}`,
-          type: 'info',
-        });
-        if (onScanSuccess) {
-          onScanSuccess(cleanBarcode, found);
+
+        // Check if fast scan mode is active & attached is hidden: Directly deliver 1 unit without blocking camera
+        if (hideAttached && fastScanMode) {
+          if (found.vanStock <= 0) {
+            sound.playErrorBuzz();
+            setScanMessage({
+              text: `Cannot deliver: 0 pcs of ${found.name} in van.`,
+              type: 'error',
+            });
+            if (voiceFeedback) {
+              sound.speak(`${found.name}, zero pieces in van`);
+            }
+            setRecentScanHud({
+              product: found,
+              qtyAdded: 0,
+              remainingVanStock: 0,
+              timestamp: Date.now(),
+            });
+            return;
+          }
+
+          // Auto-record scan for instant 1-tap delivery
+          const res = recordScan({
+            barcode: found.barcode,
+            outletId: currentOutlet?.id,
+            quantity: 1,
+            source: 'camera_scan',
+          });
+
+          if (res.success) {
+            const remaining = Math.max(0, found.vanStock - 1);
+            setRecentScanHud({
+              product: found,
+              qtyAdded: 1,
+              remainingVanStock: remaining,
+              timestamp: Date.now(),
+            });
+
+            if (voiceFeedback) {
+              sound.speak(`${found.name}, ${remaining} pieces in van, ${found.unitPrice} QAR`);
+            }
+
+            if (onScanSuccess) {
+              onScanSuccess(cleanBarcode, found);
+            }
+
+            // Auto dismiss HUD after 3 seconds so camera stays ultra clean
+            setTimeout(() => {
+              setRecentScanHud((prev) => (prev && prev.timestamp <= Date.now() - 2800 ? null : prev));
+            }, 3000);
+          }
+        } else {
+          // Standard mode: open scanned product details
+          setScannedProduct(found);
+          setDeliveryQty(1);
+          setForceShowAttachedCard(true);
+          setScanMessage({
+            text: `Found in Van: ${found.name} (${found.vanStock} pcs)`,
+            type: 'info',
+          });
+
+          if (voiceFeedback) {
+            sound.speak(`${found.name}, ${found.vanStock} pieces, ${found.unitPrice} QAR`);
+          }
+
+          if (onScanSuccess) {
+            onScanSuccess(cleanBarcode, found);
+          }
         }
       } else {
         setUnknownBarcode(cleanBarcode);
         setScannedProduct(null);
         sound.playErrorBuzz();
+        if (voiceFeedback) {
+          sound.speak('Barcode not found in catalog');
+        }
         setScanMessage({
           text: `Barcode "${cleanBarcode}" is not in the system catalog yet.`,
           type: 'error',
         });
       }
     },
-    [products, onScanSuccess]
+    [products, onScanSuccess, hideAttached, fastScanMode, voiceFeedback, currentOutlet, recordScan]
   );
 
   useEffect(() => {
@@ -131,7 +258,7 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
           {
             fps: 15,
             qrbox: { width: 280, height: 180 },
-            aspectRatio: 1.3333,
+            aspectRatio: hideAttached ? 1.4 : 1.3333,
           },
           (decodedText) => {
             if (isMounted && !isHandlingScanRef.current) {
@@ -190,7 +317,7 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
         }
       }
     };
-  }, [handleBarcodeDetected]);
+  }, [handleBarcodeDetected, hideAttached]);
 
   const toggleTorch = async () => {
     if (!scannerRef.current) return;
@@ -239,9 +366,12 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
         text: `Successfully delivered ${res.actualAddQty || deliveryQty} ${liveScannedProduct.unit}(s) @ ${formatQAR(liveScannedProduct.unitPrice)} each!`,
         type: 'success',
       });
-      // Close drawer after positive feedback
+      if (voiceFeedback) {
+        sound.speak(`Delivered ${deliveryQty} pieces. Total ${deliveryQty * liveScannedProduct.unitPrice} QAR.`);
+      }
       setTimeout(() => {
         setScannedProduct(null);
+        setForceShowAttachedCard(false);
         setScanMessage(null);
       }, 1600);
     } else {
@@ -287,56 +417,104 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
   };
 
   return (
-    <div className="relative flex flex-col bg-slate-900 rounded-2xl overflow-hidden shadow-2xl border border-slate-800 text-white">
-      {/* Scanner Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 z-10">
+    <div className={`relative flex flex-col bg-slate-900 rounded-2xl overflow-hidden shadow-2xl border border-slate-800 text-white ${fullscreenFocus ? 'min-h-[460px]' : ''}`}>
+      {/* Scanner Header: Driver Toolbar */}
+      <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 bg-slate-950/90 backdrop-blur-md border-b border-slate-800 z-10">
         <div className="flex items-center gap-2">
-          <Camera className="w-5 h-5 text-emerald-400" />
-          <span className="font-semibold text-sm tracking-tight text-white">
-            Nasroute Van Barcode Scanner
+          <Camera className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span className="font-bold text-xs sm:text-sm tracking-tight text-white whitespace-nowrap">
+            Van Scanner
           </span>
-          <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/60">
-            QATAR ACTIVE
-          </span>
+          {hideAttached && (
+            <span className="text-[10px] text-emerald-300 font-mono bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-800/80 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Scan Only (Clean)
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1 sm:gap-1.5">
+          {/* HIDE ATTACHED / SHOW ATTACHED TOGGLE (Direct user request!) */}
+          <button
+            type="button"
+            onClick={toggleHideAttachedSetting}
+            className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+              hideAttached
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+            }`}
+            title={hideAttached ? 'Attached sections are hidden (Click to show)' : 'Click to hide attached sections'}
+          >
+            {hideAttached ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5 text-indigo-400" />}
+            <span className="hidden xs:inline">{hideAttached ? 'Hide Attached' : 'Show Attached'}</span>
+          </button>
+
+          {/* Rapid Auto-Scan Mode Toggle */}
+          <button
+            type="button"
+            onClick={toggleFastScanMode}
+            className={`p-1.5 sm:px-2 sm:py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+              fastScanMode
+                ? 'bg-indigo-600 text-white'
+                : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+            }`}
+            title="Rapid Auto-Scan: Automatically adds 1 unit upon barcode scan"
+          >
+            <Zap className={`w-3.5 h-3.5 ${fastScanMode ? 'text-amber-300' : 'text-slate-400'}`} />
+            <span className="hidden sm:inline">Rapid</span>
+          </button>
+
+          {/* Voice Feedback Toggle */}
+          <button
+            type="button"
+            onClick={toggleVoiceFeedback}
+            className={`p-1.5 rounded-lg transition-all ${
+              voiceFeedback
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                : 'bg-slate-800 text-slate-400 hover:text-slate-300'
+            }`}
+            title={voiceFeedback ? 'Voice readout is ON (Reads item & price)' : 'Voice readout is OFF (Click to turn on)'}
+          >
+            {voiceFeedback ? <Volume2 className="w-3.5 h-3.5 text-amber-400" /> : <VolumeX className="w-3.5 h-3.5" />}
+          </button>
+
+          {/* Torch Toggle */}
           {hasTorch && (
             <button
               onClick={toggleTorch}
-              className={`p-2 rounded-lg transition-colors ${
+              className={`p-1.5 rounded-lg transition-colors ${
                 torchOn ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
               }`}
               title="Toggle Flashlight"
             >
-              {torchOn ? <Zap className="w-4 h-4" /> : <ZapOff className="w-4 h-4" />}
+              {torchOn ? <Zap className="w-3.5 h-3.5" /> : <ZapOff className="w-3.5 h-3.5" />}
             </button>
           )}
 
+          {/* Type Barcode Keypad */}
           <button
             onClick={() => setShowManualInput(!showManualInput)}
-            className={`p-2 rounded-lg transition-colors text-xs flex items-center gap-1.5 font-medium ${
+            className={`p-1.5 rounded-lg transition-colors text-xs flex items-center gap-1 ${
               showManualInput ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
             }`}
             title="Manual Barcode Keypad"
           >
-            <Keyboard className="w-4 h-4" />
-            <span className="hidden sm:inline">Type Barcode</span>
+            <Keyboard className="w-3.5 h-3.5" />
           </button>
 
           {onClose && (
             <button
               onClick={onClose}
-              className="p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+              className="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
             >
-              <X className="w-4 h-4" />
+              <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
       </div>
 
-      {/* Camera Viewport */}
-      <div className="relative min-h-[280px] max-h-[360px] bg-black flex items-center justify-center overflow-hidden">
+      {/* Camera Viewport: Stays clear and visible */}
+      <div className={`relative ${hideAttached ? 'min-h-[320px] sm:min-h-[380px]' : 'min-h-[260px] max-h-[340px]'} bg-black flex items-center justify-center overflow-hidden`}>
         <div
           id={containerIdRef.current}
           className="w-full h-full object-cover [&_video]:w-full [&_video]:h-full [&_video]:object-cover"
@@ -344,7 +522,7 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
 
         {/* Viewfinder Reticle Overlay */}
         <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-          <div className="relative w-[280px] h-[160px] border-2 border-emerald-400/80 rounded-xl shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]">
+          <div className="relative w-[280px] h-[170px] border-2 border-emerald-400/80 rounded-xl shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]">
             <div className="absolute -top-1 -left-1 w-5 h-5 border-t-4 border-l-4 border-emerald-400 rounded-tl-md" />
             <div className="absolute -top-1 -right-1 w-5 h-5 border-t-4 border-r-4 border-emerald-400 rounded-tr-md" />
             <div className="absolute -bottom-1 -left-1 w-5 h-5 border-b-4 border-l-4 border-emerald-400 rounded-bl-md" />
@@ -354,10 +532,59 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
             <div className="absolute left-2 right-2 top-1/2 -translate-y-1/2 h-0.5 bg-red-500/90 shadow-[0_0_12px_#ef4444] animate-pulse" />
 
             <div className="absolute -bottom-6 left-0 right-0 text-center text-[11px] font-medium text-emerald-300 tracking-wide drop-shadow">
-              Scan barcode from delivery van
+              Point camera at barcode on van product
             </div>
           </div>
         </div>
+
+        {/* FLOATING HEADS-UP DISPLAY (HUD) IN SCAN-ONLY MODE (Keeps attached hidden!) */}
+        {hideAttached && recentScanHud && (
+          <div className="absolute top-3 left-3 right-3 z-30 animate-in fade-in slide-in-from-top-2 duration-150">
+            <div className="bg-slate-950/95 backdrop-blur-md border border-emerald-500/60 rounded-xl p-3 text-white shadow-2xl flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">
+                      ✓ Delivered +{recentScanHud.qtyAdded}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      Van: {recentScanHud.remainingVanStock} left
+                    </span>
+                  </div>
+                  <h4 className="text-xs sm:text-sm font-bold text-white truncate leading-tight">
+                    {recentScanHud.product.name}
+                  </h4>
+                  <div className="text-[11px] font-mono text-emerald-400 font-bold">
+                    {formatQAR(recentScanHud.product.unitPrice)} / {recentScanHud.product.unit}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScannedProduct(recentScanHud.product);
+                    setForceShowAttachedCard(true);
+                  }}
+                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 transition-colors"
+                >
+                  Adjust Qty
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRecentScanHud(null)}
+                  className="p-1 text-slate-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Camera Permission / Error Fallback */}
         {cameraError && (
@@ -401,8 +628,8 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
         </form>
       )}
 
-      {/* CORE DRIVER FEATURE: Instant Van Item Scanned Detail Card */}
-      {liveScannedProduct && (
+      {/* ATTACHED DETAIL CARD: Only shown when "Show Attached" is active, or user specifically requests it */}
+      {(!hideAttached || forceShowAttachedCard) && liveScannedProduct && (
         <div className="p-4 bg-slate-950 border-t-2 border-emerald-500 text-white animate-in slide-in-from-bottom duration-200">
           <div className="flex items-start justify-between gap-3 mb-3">
             <div className="flex items-center gap-3">
@@ -431,7 +658,10 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
             </div>
 
             <button
-              onClick={() => setScannedProduct(null)}
+              onClick={() => {
+                setScannedProduct(null);
+                setForceShowAttachedCard(false);
+              }}
               className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
               title="Close card"
             >
@@ -595,10 +825,13 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setScannedProduct(null)}
+              onClick={() => {
+                setScannedProduct(null);
+                setForceShowAttachedCard(false);
+              }}
               className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-colors"
             >
-              Just Check Price/Stock
+              Dismiss / Scan Next
             </button>
             <button
               type="button"
@@ -613,7 +846,7 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
         </div>
       )}
 
-      {/* Unknown Barcode Card with 1-Tap Add */}
+      {/* Unknown Barcode Card */}
       {unknownBarcode && (
         <div className="p-4 bg-slate-950 border-t-2 border-amber-500 text-white space-y-3">
           <div className="flex items-start justify-between">
@@ -654,12 +887,16 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
         </div>
       )}
 
-      {/* Scanner Status Bar & Optional Collapsed Test Simulation Barcodes */}
-      <div className="px-4 py-2.5 bg-slate-950/90 border-t border-slate-800 flex items-center justify-between text-xs">
+      {/* Scanner Status Bar: Shows clean status & simulation test toggler */}
+      <div className="px-3 sm:px-4 py-2 bg-slate-950/95 border-t border-slate-800 flex items-center justify-between text-xs">
         <div className="flex items-center gap-2 text-[11px] text-slate-400">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="font-medium text-slate-300">Scanner Active</span>
-          <span className="hidden sm:inline text-slate-500">· Aim camera at product barcode</span>
+          <span className="font-medium text-slate-300">Camera Live</span>
+          {hideAttached ? (
+            <span className="text-emerald-400/90 hidden xs:inline">· Focus mode: Attached hidden</span>
+          ) : (
+            <span className="text-slate-500 hidden xs:inline">· Aim at barcode</span>
+          )}
         </div>
 
         {/* Small subtle toggle for simulation (kept hidden by default) */}
@@ -670,7 +907,7 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
           title="Toggle Simulation Barcodes for Testing"
         >
           <Sparkles className="w-3 h-3 text-amber-500/70" />
-          <span>{showTestBarcodes ? 'Hide Test Barcodes' : 'Test Barcodes (Simulation)'}</span>
+          <span>{showTestBarcodes ? 'Hide Test Codes' : 'Test Codes'}</span>
         </button>
       </div>
 
@@ -680,7 +917,7 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-1.5 text-xs font-medium text-slate-300">
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>Catalog Quick-Test Simulation ({products.length} items):</span>
+              <span>Catalog Simulation ({products.length} items):</span>
             </div>
             <button
               type="button"
@@ -717,7 +954,7 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
                           : 'bg-rose-950/80 text-rose-300'
                       }`}
                     >
-                      {prod.vanStock} pcs in van
+                      {prod.vanStock} in van
                     </span>
                   </div>
                 </button>

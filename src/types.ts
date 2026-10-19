@@ -71,6 +71,9 @@ export interface PhoneDeviceSettings {
   keepScreenAwake: boolean; // Screen wake lock API
   showStatusBar: boolean;
   scannerQuantityDefault: 1 | 5 | 10;
+  hideAttached: boolean; // Keep attached sections hidden so only scanner is visible
+  fastScanMode: boolean; // Fast continuous 1-tap scan without modal block
+  voiceFeedback: boolean; // Hands-free voice announcement of item & price
 }
 
 export const DEFAULT_PHONE_SETTINGS: PhoneDeviceSettings = {
@@ -84,6 +87,9 @@ export const DEFAULT_PHONE_SETTINGS: PhoneDeviceSettings = {
   keepScreenAwake: true,
   showStatusBar: true,
   scannerQuantityDefault: 1,
+  hideAttached: true,
+  fastScanMode: true,
+  voiceFeedback: false,
 };
 
 export interface PageSetupConfig {
